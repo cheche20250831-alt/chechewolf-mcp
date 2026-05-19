@@ -104,13 +104,19 @@ async def mirror_to_github(image_bytes: bytes, aspect: str, scene_hint: str) -> 
 
 
 # ============ MCP server ============
-# 讓 SSE server 綁定到 Zeabur 給的 PORT(或本機 fallback 8000)
-# 必須是 0.0.0.0 才能讓 Docker 容器外部訪問
-mcp = FastMCP(
-    "chechewolf-image-gen",
-    host="0.0.0.0",
-    port=int(os.environ.get("PORT", 8000)),
-)
+mcp = FastMCP("chechewolf-image-gen")
+
+# 強制覆蓋 host/port — 用 settings 屬性,比建構式 kwargs 更可靠
+# 必須 0.0.0.0 才能讓 Zeabur 從外部連進來
+_raw_port = os.environ.get("PORT", "8000")
+try:
+    _port = int(_raw_port)
+except (ValueError, TypeError):
+    log.warning("PORT 環境變數無效 (%r),fallback 到 8000", _raw_port)
+    _port = 8000
+
+mcp.settings.host = "0.0.0.0"
+mcp.settings.port = _port
 
 
 @mcp.tool()
@@ -197,5 +203,16 @@ if __name__ == "__main__":
     # Zeabur 部署時透過 HTTP/SSE transport 對外
     # 本機測試也可改成 stdio:mcp.run(transport="stdio")
     transport = os.environ.get("MCP_TRANSPORT", "sse")
-    log.info("Starting chechewolf-mcp with transport=%s", transport)
-    mcp.run(transport=transport)
+    log.info("=" * 60)
+    log.info("Starting chechewolf-mcp")
+    log.info("  transport: %s", transport)
+    log.info("  bind: %s:%s", mcp.settings.host, mcp.settings.port)
+    log.info("  FAL_API_KEY: %s", "set" if FAL_API_KEY else "MISSING")
+    log.info("  GITHUB_TOKEN: %s", "set" if GITHUB_TOKEN else "MISSING (mirror disabled)")
+    log.info("  LoRA URL: %s", CHECHE_LORA_URL[:60] + "...")
+    log.info("=" * 60)
+    try:
+        mcp.run(transport=transport)
+    except Exception as e:
+        log.exception("Server crashed on startup: %s", e)
+        raise
