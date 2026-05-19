@@ -118,6 +118,11 @@ except (ValueError, TypeError):
 mcp.settings.host = "0.0.0.0"
 mcp.settings.port = _port
 
+# Stateless mode — 每個請求獨立,不需要 client 維持 session_id
+# Rikkahub 等較簡單的 MCP client 不一定能正確處理 session 連續性,
+# 開啟這個可以避免「tool not found」的奇怪錯誤。
+mcp.settings.stateless_http = True
+
 # 關掉 MCP SDK 內建的 DNS rebinding 防護
 # 預設只允許 localhost/127.0.0.1,Zeabur 反向代理用真實域名(cheche-image.zeabur.app)會被擋。
 # 對外公開的 MCP server 必須關這個檢查,或者明確 whitelist 公網域名。
@@ -161,7 +166,9 @@ async def generate_image(scene: str, aspect: str = "portrait") -> dict:
     prompt = PROMPT_TEMPLATE.format(scene=scene)
     image_size = ASPECT_TO_SIZE.get(aspect, "portrait_16_9")
 
-    log.info("generate_image scene=%r aspect=%r", scene[:80], aspect)
+    log.info("=== TOOL CALL: generate_image ===")
+    log.info("  scene: %r", scene[:120])
+    log.info("  aspect: %r", aspect)
 
     payload = {
         "prompt": prompt,
@@ -227,6 +234,7 @@ if __name__ == "__main__":
     log.info("  transport: %s", transport)
     log.info("  bind: %s:%s", mcp.settings.host, mcp.settings.port)
     log.info("  endpoint path: %s", mcp.settings.streamable_http_path if transport == "streamable-http" else mcp.settings.sse_path)
+    log.info("  stateless_http: %s", mcp.settings.stateless_http)
     log.info("  FAL_API_KEY: %s", "set" if FAL_API_KEY else "MISSING")
     log.info("  GITHUB_TOKEN: %s", "set" if GITHUB_TOKEN else "MISSING (mirror disabled)")
     log.info("  LoRA URL: %s", CHECHE_LORA_URL[:60] + "...")
