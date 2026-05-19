@@ -104,7 +104,13 @@ async def mirror_to_github(image_bytes: bytes, aspect: str, scene_hint: str) -> 
 
 
 # ============ MCP server ============
-mcp = FastMCP("chechewolf-image-gen")
+# 讓 SSE server 綁定到 Zeabur 給的 PORT(或本機 fallback 8000)
+# 必須是 0.0.0.0 才能讓 Docker 容器外部訪問
+mcp = FastMCP(
+    "chechewolf-image-gen",
+    host="0.0.0.0",
+    port=int(os.environ.get("PORT", 8000)),
+)
 
 
 @mcp.tool()
