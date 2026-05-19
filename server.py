@@ -200,13 +200,15 @@ async def generate_image(scene: str, aspect: str = "portrait") -> dict:
 
 
 if __name__ == "__main__":
-    # Zeabur 部署時透過 HTTP/SSE transport 對外
-    # 本機測試也可改成 stdio:mcp.run(transport="stdio")
-    transport = os.environ.get("MCP_TRANSPORT", "sse")
+    # 預設 streamable-http(MCP 官方推薦,SSE 已 legacy)
+    # endpoint 在 /mcp,跟 MetaMCP 那邊 STREAMABLE_HTTP 一致
+    # 本機測試也可改 stdio:MCP_TRANSPORT=stdio
+    transport = os.environ.get("MCP_TRANSPORT", "streamable-http")
     log.info("=" * 60)
     log.info("Starting chechewolf-mcp")
     log.info("  transport: %s", transport)
     log.info("  bind: %s:%s", mcp.settings.host, mcp.settings.port)
+    log.info("  endpoint path: %s", mcp.settings.streamable_http_path if transport == "streamable-http" else mcp.settings.sse_path)
     log.info("  FAL_API_KEY: %s", "set" if FAL_API_KEY else "MISSING")
     log.info("  GITHUB_TOKEN: %s", "set" if GITHUB_TOKEN else "MISSING (mirror disabled)")
     log.info("  LoRA URL: %s", CHECHE_LORA_URL[:60] + "...")

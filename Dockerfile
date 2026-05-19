@@ -15,8 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY server.py .
 
 # Zeabur 預設會給一個 PORT 環境變數,MCP SSE server 監聽這個 port
-ENV MCP_TRANSPORT=sse
-ENV PORT=8000
-EXPOSE 8000
+ENV MCP_TRANSPORT=streamable-http
+EXPOSE 8080
 
 CMD ["python", "-u", "server.py"]
