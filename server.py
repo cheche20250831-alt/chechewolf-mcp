@@ -32,8 +32,10 @@ FAL_API_KEY = os.environ.get("FAL_API_KEY")
 FAL_ENDPOINT = "https://fal.run/fal-ai/flux-lora"
 
 # GitHub 鏡像設定(讓圖永久保存,不依賴 fal.ai CDN)
+# 預設用 chechewolf-mcp 這個 PUBLIC repo,raw URL 才能被 Rikkahub 等外部 client 直接渲染
+# 想分家用獨立圖庫的話,改 GITHUB_REPO 環境變數就好
 GITHUB_OWNER = os.environ.get("GITHUB_OWNER", "cheche20250831-alt")
-GITHUB_REPO = os.environ.get("GITHUB_REPO", "my-ai-memory")
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "chechewolf-mcp")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # 需要 Contents: Read+Write
 GITHUB_IMAGE_DIR = os.environ.get("GITHUB_IMAGE_DIR", "generated_images")
 
