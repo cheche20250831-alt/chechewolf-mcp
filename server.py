@@ -118,6 +118,24 @@ except (ValueError, TypeError):
 mcp.settings.host = "0.0.0.0"
 mcp.settings.port = _port
 
+# 關掉 MCP SDK 內建的 DNS rebinding 防護
+# 預設只允許 localhost/127.0.0.1,Zeabur 反向代理用真實域名(cheche-image.zeabur.app)會被擋。
+# 對外公開的 MCP server 必須關這個檢查,或者明確 whitelist 公網域名。
+try:
+    from mcp.server.transport_security import TransportSecuritySettings
+    mcp.settings.transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    )
+    log.info("DNS rebinding protection: disabled (transport_security)")
+except (ImportError, AttributeError) as e:
+    log.warning("transport_security setup 失敗 (%s),嘗試其他路徑", e)
+    # 退路:某些 SDK 版本可能要走不同 attribute
+    try:
+        mcp.settings.disable_dns_rebinding_protection = True
+        log.info("DNS rebinding protection: disabled (legacy flag)")
+    except AttributeError:
+        log.error("無法關閉 DNS rebinding 防護,服務可能仍會擋 Zeabur 域名")
+
 
 @mcp.tool()
 async def generate_image(scene: str, aspect: str = "portrait") -> dict:
