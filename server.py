@@ -215,13 +215,18 @@ async def generate_image(scene: str, aspect: str = "portrait") -> dict:
     # 給對面 AI 的 markdown 優先用 GitHub URL(永久),沒鏡像成功才退回 fal.ai
     display_url = github_url or fal_url
 
-    return {
-        "image_url": display_url,
-        "fal_url": fal_url,
-        "github_url": github_url,
-        "prompt_used": prompt,
-        "markdown": f"![]({display_url})",
-    }
+    # 回傳直接的指令字串,而不是 dict
+    # — 觀察發現 Gemini 拿到 dict 容易腦補「我把圖給妳了」卻不真正寫出 markdown URL
+    # — 直接給強硬指令最有效
+    return (
+        f"![]({display_url})\n\n"
+        f"---\n"
+        f"圖已生成並永久保存。**你的回應 MUST 以上面那行 markdown 開頭**"
+        f"(就是 `![]({display_url})` 這串字一字不漏地原樣輸出),"
+        f"然後才是你想說的話。不要描述、不要敘事說「我把圖給妳」,"
+        f"要直接讓圖出現在對話裡。\n\n"
+        f"Image URL: {display_url}"
+    )
 
 
 if __name__ == "__main__":
