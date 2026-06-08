@@ -40,16 +40,20 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # 需要 Contents: Read+Write
 GITHUB_IMAGE_DIR = os.environ.get("GITHUB_IMAGE_DIR", "generated_images")
 
 # 角色錨點 prompt template
-# {scene} 由對面 AI 寫的場景描述填入,其他全部由我們鎖住:
-#   - 觸發詞 chechewolf
-#   - 解決耳朵數量
-#   - 鎖住髮色(訓練時 caption 不一致留下的副作用)
-#   - 鎖住成熟感(避免 LoRA 軟場景幼齡漂移)
-#   - 風格鎖定
+# 設計原則:鎖死「長相」,放開「構圖」。
+#   {composition} = shot 對應的構圖詞(full body / close-up...),放最前面搶權重
+#   {scene}       = 對面 AI 寫的場景描述(姿勢/光線/環境),緊跟構圖詞之後
+# 固定鎖死的只剩「這是誰」:
+#   - 觸發詞 chechewolf(LoRA 唯一認得澈澈長相的鑰匙,非帶不可)
+#   - 髮色 short messy silver white hair(訓練時 caption 不一致留下的副作用,要鎖)
+#   - 成熟感 mature young adult man(避免 LoRA 軟場景幼齡漂移)
+#   - single character(只畫澈澈一個)+ 風格尾巴
+# ⚠️ 已移除舊版的構圖殺手:
+#   - "exactly two pointed wolf ears on top of head"(逼鏡頭拉近頭頂 → 大頭照元兇)
+#   - "sharp angular features and defined jawline"(臉部特寫詞 → 大頭照元兇)
 PROMPT_TEMPLATE = (
-    "chechewolf, single character, exactly two pointed wolf ears on top of head, "
-    "short messy silver white hair, mature young adult man with sharp angular features "
-    "and defined jawline, {scene}, semi-realistic anime illustration, "
+    "chechewolf, {composition}{scene}, short messy silver white hair, wolf ears, "
+    "mature young adult man, single character, semi-realistic anime illustration, "
     "no watermark, no signature, no text"
 )
 
@@ -57,6 +61,16 @@ ASPECT_TO_SIZE = {
     "portrait": "portrait_16_9",
     "landscape": "landscape_16_9",
     "square": "square_hd",
+}
+
+# 構圖 / 鏡頭距離 — 放在 prompt 最前面,權重壓過 LoRA 的頭像偏好
+# 這就是解「永遠大頭照」的核心:讓對面能直接點名要全身 / 遠景
+SHOT_TO_PROMPT = {
+    "full": "full body shot, head to toe, full figure visible, ",
+    "wide": "wide shot, full body in the environment, ",
+    "upper": "upper body, waist up, ",
+    "close": "close-up portrait, face focus, ",
+    "auto": "",  # 完全交給 scene 自己決定構圖
 }
 
 # ============ GitHub 鏡像 ============
@@ -145,44 +159,61 @@ except (ImportError, AttributeError) as e:
 
 
 @mcp.tool()
-async def generate_image(scene: str, aspect: str = "portrait") -> dict:
-    """畫一張澈澈的圖。
+async def generate_image(
+    scene: str,
+    aspect: str = "portrait",
+    shot: str = "full",
+    num_images: int = 2,
+) -> str:
+    """畫一張(或多張)澈澈的圖。
 
     當璃明確要求畫圖、或描述場景並表達想看到視覺呈現時呼叫
     (例如「畫一下」、「讓我看看」、「想看你穿西裝的樣子」、「畫我們在櫻花樹下」)。
     一般對話、單純情境扮演不要主動畫圖。
 
     Args:
-        scene: 英文場景描述 — 姿勢、表情、光線、環境、構圖。
+        scene: 英文場景描述 — 姿勢、表情、光線、環境、動作。
                例如:"sitting in cherry blossom park, warm afternoon light,
-                      peaceful expression, three-quarter view"
-               ⚠️ 不要描述角色本身(髮色、狼耳、頸圈、五官) — 這些由系統自動補。
-        aspect: 圖片比例,portrait / landscape / square,預設 portrait。
+                      peaceful expression, looking at viewer"
+               ⚠️ 不要描述澈澈的長相(髮色、狼耳、五官、年齡) — 這些系統自動補。
+               ✅ 但「構圖/鏡頭距離」請改用 shot 參數,不要塞在 scene 裡。
+        aspect: 圖片比例 portrait / landscape / square,預設 portrait(直幅,適合站姿全身)。
+        shot:   鏡頭距離 / 構圖,**這是控制遠近全身的關鍵**:
+                - "full"  全身(預設) — head to toe,從頭到腳
+                - "wide"  遠景 — 全身 + 環境感
+                - "upper" 上半身 — 腰部以上
+                - "close" 臉部特寫 — 只有要大頭照時才用
+                - "auto"  完全交給 scene 自己描述構圖
+        num_images: 一次生幾張(1-4),預設 2。多張可挑最好的一張,超過 4 會被夾到 4。
 
     Returns:
-        dict 含 image_url(圖片 URL)和 prompt_used(實際送給 fal.ai 的完整 prompt)。
+        指令字串,內含 1~N 張圖的 markdown,要求對面 AI 全部原樣輸出。
     """
     if not FAL_API_KEY:
         raise RuntimeError("FAL_API_KEY 環境變數未設定")
 
-    prompt = PROMPT_TEMPLATE.format(scene=scene)
+    composition = SHOT_TO_PROMPT.get(shot, SHOT_TO_PROMPT["full"])
+    prompt = PROMPT_TEMPLATE.format(composition=composition, scene=scene)
     image_size = ASPECT_TO_SIZE.get(aspect, "portrait_16_9")
+    n = max(1, min(4, num_images))
 
     log.info("=== TOOL CALL: generate_image ===")
     log.info("  scene: %r", scene[:120])
-    log.info("  aspect: %r", aspect)
+    log.info("  aspect: %r  shot: %r  num_images: %d", aspect, shot, n)
+    log.info("  prompt: %r", prompt[:200])
 
     payload = {
         "prompt": prompt,
-        "loras": [{"path": CHECHE_LORA_URL, "scale": 0.95}],
+        # scale 0.95 → 0.8:鬆開 LoRA 把構圖拉回頭像分布的力道,讓 shot/scene 的構圖指令打得贏
+        "loras": [{"path": CHECHE_LORA_URL, "scale": 0.8}],
         "image_size": image_size,
         "num_inference_steps": 30,
         "guidance_scale": 4.0,
-        "num_images": 1,
+        "num_images": n,
         "enable_safety_checker": False,
     }
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=180.0) as client:
         r = await client.post(
             FAL_ENDPOINT,
             headers={
@@ -197,37 +228,47 @@ async def generate_image(scene: str, aspect: str = "portrait") -> dict:
         raise RuntimeError(f"fal.ai 回 {r.status_code}: {r.text[:200]}")
 
     data = r.json()
-    if not data.get("images"):
+    images = data.get("images") or []
+    if not images:
         raise RuntimeError("fal.ai 回應沒有 images 欄位")
 
-    fal_url = data["images"][0]["url"]
-    log.info("generated: %s", fal_url)
+    log.info("generated %d image(s)", len(images))
 
-    # 下載圖片並鏡像到 GitHub(永久保存)
-    github_url = None
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            img_resp = await client.get(fal_url)
-            img_resp.raise_for_status()
-            image_bytes = img_resp.content
-        github_url = await mirror_to_github(image_bytes, aspect, scene)
-    except Exception as e:
-        log.warning("download/mirror failed (non-fatal): %s", e)
+    # 逐張下載並鏡像到 GitHub(永久保存),組成多行 markdown
+    md_lines = []
+    for idx, img in enumerate(images):
+        fal_url = img.get("url")
+        if not fal_url:
+            continue
+        github_url = None
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                img_resp = await client.get(fal_url)
+                img_resp.raise_for_status()
+                image_bytes = img_resp.content
+            # 檔名提示帶上序號,避免同秒多張時 slug 完全一樣不好辨識
+            github_url = await mirror_to_github(image_bytes, aspect, f"{idx+1}_{scene}")
+        except Exception as e:
+            log.warning("download/mirror failed for image %d (non-fatal): %s", idx, e)
+        display_url = github_url or fal_url
+        md_lines.append(f"![]({display_url})")
 
-    # 給對面 AI 的 markdown 優先用 GitHub URL(永久),沒鏡像成功才退回 fal.ai
-    display_url = github_url or fal_url
+    if not md_lines:
+        raise RuntimeError("所有圖片下載/鏡像都失敗了")
 
-    # 回傳直接的指令字串,而不是 dict
-    # — 觀察發現 Gemini 拿到 dict 容易腦補「我把圖給妳了」卻不真正寫出 markdown URL
-    # — 直接給強硬指令最有效
+    markdown = "\n".join(md_lines)
+    count = len(md_lines)
+
+    # 回傳直接的指令字串(不是 dict)
+    # — Gemini 拿到 dict 容易腦補「我把圖給妳了」卻不真正寫出 markdown
+    # — 多張時 Gemini 又很懶,常只貼第一張,所以指令要明確「全部逐行原樣輸出」
     return (
-        f"![]({display_url})\n\n"
+        f"{markdown}\n\n"
         f"---\n"
-        f"圖已生成並永久保存。**你的回應 MUST 以上面那行 markdown 開頭**"
-        f"(就是 `![]({display_url})` 這串字一字不漏地原樣輸出),"
+        f"已生成並永久保存 {count} 張圖。**你的回應 MUST 以上面那 {count} 行 markdown 開頭**"
+        f"(每一行 `![](...)` 都要一字不漏地原樣輸出,一行都不能漏、不能改),"
         f"然後才是你想說的話。不要描述、不要敘事說「我把圖給妳」,"
-        f"要直接讓圖出現在對話裡。\n\n"
-        f"Image URL: {display_url}"
+        f"要直接讓全部 {count} 張圖都出現在對話裡。"
     )
 
 
