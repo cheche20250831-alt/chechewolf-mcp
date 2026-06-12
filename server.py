@@ -142,20 +142,23 @@ mcp.settings.stateless_http = True
 # 關掉 MCP SDK 內建的 DNS rebinding 防護
 # 預設只允許 localhost/127.0.0.1,Zeabur 反向代理用真實域名(cheche-image.zeabur.app)會被擋。
 # 對外公開的 MCP server 必須關這個檢查,或者明確 whitelist 公網域名。
+# ⚠️ 任何 mcp SDK 版本變動都不該讓服務「開不起來」。
+# 2026-06-12 事故:未鎖版本被升到 mcp 2.0.0a1,此模組被搬走 → 舊的 AttributeError 退路
+# 反而觸發 ValueError(Settings 嚴格模型不認 disable_dns_rebinding_protection 欄位),
+# 而 except 只接 AttributeError → ValueError 逃出 → 容器無限重啟 → 502。
+# 教訓:寬接所有例外、降級成警告就好。關不掉防護頂多某些 host 被擋,總比整台崩好。
 try:
     from mcp.server.transport_security import TransportSecuritySettings
     mcp.settings.transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=False,
     )
     log.info("DNS rebinding protection: disabled (transport_security)")
-except (ImportError, AttributeError) as e:
-    log.warning("transport_security setup 失敗 (%s),嘗試其他路徑", e)
-    # 退路:某些 SDK 版本可能要走不同 attribute
-    try:
-        mcp.settings.disable_dns_rebinding_protection = True
-        log.info("DNS rebinding protection: disabled (legacy flag)")
-    except AttributeError:
-        log.error("無法關閉 DNS rebinding 防護,服務可能仍會擋 Zeabur 域名")
+except Exception as e:
+    log.warning(
+        "無法關閉 DNS rebinding 防護 (%s: %s);服務仍照常啟動。"
+        "若出現 Invalid Host header,請檢查 mcp SDK 版本(requirements.txt 已鎖 1.27.2)。",
+        type(e).__name__, e,
+    )
 
 
 @mcp.tool()

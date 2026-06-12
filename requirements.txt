@@ -1,2 +1,6 @@
-mcp[cli]>=1.2.0
-httpx>=0.27.0
+# ⚠️ 版本鎖死,不要改回 >= 浮動範圍。
+# 2026-06-12 事故:原本寫 mcp[cli]>=1.2.0,Zeabur 某次重佈 pip 抓到 mcp 2.0.0a1(alpha),
+# 該版把 mcp.server.transport_security 搬走 → server.py import 失敗 → 容器無限重啟 → 對外 502。
+# code 一行沒動,卻因「未鎖依賴 + 平台重建」整台崩潰。鎖到實測可用的穩定版。
+mcp[cli]==1.27.2
+httpx>=0.27.0,<1.0
