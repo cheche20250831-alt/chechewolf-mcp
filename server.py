@@ -63,9 +63,9 @@ NAI_ASPECT_TO_SIZE = {
 # 澈澈 danbooru 錨點(對應人設:183cm 冷白膚、銀白自然捲、銀眼、超毛狼耳、蓬鬆大尾)
 # 只描述「這是誰」,構圖/場景交給呼叫端;draw_cheche=False 時整段不帶。
 CHECHE_NAI_ANCHOR = (
-    "1boy, solo, mature male, tall, slim, silver hair, wavy hair, messy hair, "
-    "pale skin, silver eyes, wolf ears, wolf tail, animal ear fluff, "
-    "delicate features, handsome"
+    "1boy, solo, mature male, tall, slim, silver hair, short hair, "
+    "short messy hair, slightly wavy hair, pale skin, silver eyes, "
+    "wolf ears, wolf tail, animal ear fluff, delicate features, handsome"
 )
 # NAI 預設負面(ucPreset 0 已含大量品質負面,這裡只補文字/浮水印)
 NAI_DEFAULT_UC = (
