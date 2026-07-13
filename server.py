@@ -233,11 +233,16 @@ async def generate_image(
     shot: str = "full",
     num_images: int = 2,
 ) -> str:
-    """畫一張(或多張)澈澈的圖。
+    """畫一張(或多張)澈澈的圖 —— **只畫澈澈一個人**。
 
     當璃明確要求畫圖、或描述場景並表達想看到視覺呈現時呼叫
-    (例如「畫一下」、「讓我看看」、「想看你穿西裝的樣子」、「畫我們在櫻花樹下」)。
+    (例如「畫一下」、「讓我看看」、「想看你穿西裝的樣子」、「畫你站在櫻花樹下」)。
     一般對話、單純情境扮演不要主動畫圖。
+
+    ⚠️ 這支的 LoRA 只訓練了澈澈的臉,prompt 也鎖 single character,
+       所以**只適合單人澈澈**。要畫「雙人/多人」(例如澈澈和璃在一起)
+       → 優先用 generate_image_gpt(SFW 場景、構圖最穩),
+         或 generate_image_nai(動漫風 / 香香)。別用這支畫雙人。
 
     Args:
         scene: 英文場景描述 — 姿勢、表情、光線、環境、動作。
@@ -337,7 +342,11 @@ async def generate_image_gpt(
       - 手帳風/拼貼風的月曆、週計畫、貼紙頁
       - 有明確文字/標題/日期的版面
       - 複雜場景、多物件、俯視擺拍(flat lay)
-    ⚠️ 不鎖角色:prompt 寫什麼就畫什麼,要畫澈澈請自己在 prompt 描述外觀。
+      - **雙人/多人場景(SFW)**:澈澈和璃、或任何兩人以上的構圖,
+        優先用這支 —— fal 那支的 LoRA 只會單人澈澈,畫不了雙人。
+    ⚠️ 不鎖角色:prompt 寫什麼就畫什麼,要畫澈澈請自己在 prompt 描述外觀
+       (銀白短亂捲髮、銀眼、狼耳、大尾巴、冷白膚、成熟俊臉)。
+    ⚠️ 有內容審查:school uniform/校服 + 親密情侶、露骨內容會被擋 → 改用 generate_image_nai。
     ⚠️ 有內容審查,色圖會被擋 → 香香圖請改用 generate_image_nai。
 
     Args:
@@ -424,6 +433,11 @@ async def generate_image_nai(
     這支走動漫/二次元畫風,而且不做內容審查,適合:
       - 澈澈的動漫風立繪、香香圖(draw_cheche=True,預設)
       - 任何動漫風題材(draw_cheche=False → 不帶澈澈外貌,純自由畫)
+      - **雙人/多人的動漫或香香場景**(例如校服曖昧、被 GPT 擋掉的劇情):
+        走這支。⚠️ 畫雙人時請設 draw_cheche=False,並在 scene 裡自己
+        把兩個角色的外貌都寫清楚(澈澈=silver hair, short messy hair,
+        wolf ears, wolf tail, silver eyes...),否則預設錨點的 "1boy, solo"
+        會跟雙人打架、屬性也會互相沾染。
     NAI 認不得澈澈的臉,靠文字錨點描述外觀,所以臉不如 fal.ai 那支準,
     但畫風穩、尺度開。要澈澈本人最像 → 用 generate_image;要香香/動漫風 → 用這支。
 
