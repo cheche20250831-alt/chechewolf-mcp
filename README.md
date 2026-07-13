@@ -1,8 +1,15 @@
 # chechewolf-mcp
 
-MCP server that exposes a single `generate_image` tool. Internally calls
-[fal.ai](https://fal.ai)'s Flux Dev with the **chechewolf LoRA v3** to generate
-images of 澈澈 (chechewolf character).
+MCP server that exposes **three** image-generation tools, each backed by a
+different engine so they cover different jobs:
+
+| Tool | Engine | Best at | Lewd? |
+|---|---|---|---|
+| `generate_image` | fal.ai Flux + **chechewolf LoRA v3** | 澈澈's face, most accurate likeness | ✅ safety off |
+| `generate_image_gpt` | OpenAI **gpt-image-2** | journals, calendars, scenes, layout, text rendering — general purpose | ❌ moderated |
+| `generate_image_nai` | **NovelAI Diffusion V4.5** | anime style + NSFW (character anchor is text-based) | ✅ |
+
+All three mirror output to a GitHub repo for permanent URLs.
 
 Designed to be hosted on Zeabur via Docker and consumed by Rikkahub or any
 MCP-compatible client.
@@ -26,9 +33,14 @@ in the configured repo.
 
 ```bash
 pip install -r requirements.txt
-export FAL_API_KEY=fal_...
+export FAL_API_KEY=fal_...        # generate_image
+export OPENAI_API_KEY=sk-...      # generate_image_gpt (needs org verification for gpt-image models)
+export NOVELAI_TOKEN=pst-...      # generate_image_nai (NovelAI subscription, persistent token)
 python server.py
 ```
+
+Each tool is independently gated on its key: if a key is missing, only that tool
+errors with a clear message — the others keep working.
 
 By default it runs in `sse` transport mode. For local Claude Desktop testing,
 set `MCP_TRANSPORT=stdio`.
@@ -57,15 +69,19 @@ set `MCP_TRANSPORT=stdio`.
 ## Tool spec
 
 ```
-generate_image(scene: str, aspect: str = "portrait") -> dict
+generate_image(scene, aspect="portrait", shot="full", num_images=2)
+  fal.ai + LoRA. 澈澈's face, most accurate. Do NOT describe appearance
+  (auto-added); use `shot` for framing (full/wide/upper/close/auto).
 
-  scene: English scene description (pose, lighting, environment, composition).
-         Do NOT describe character appearance — those are auto-added.
-         Example: "sitting in cherry blossom park, warm afternoon light"
+generate_image_gpt(prompt, aspect="square", quality="high", num_images=1)
+  gpt-image-2. Freeform prompt, NO character lock. For journals/calendars/
+  scenes/text. Moderated (no NSFW). aspect → 1024x1536 / 1536x1024 / 1024x1024.
 
-  aspect: "portrait" | "landscape" | "square"  (default "portrait")
+generate_image_nai(scene, aspect="portrait", draw_cheche=True, num_images=1)
+  NovelAI V4.5. Anime style, NSFW-friendly. draw_cheche=True prepends a
+  danbooru text anchor for 澈澈; False = freeform. Use danbooru-style tags.
 
-  Returns: { image_url, prompt_used, markdown }
+All three return an instruction string embedding the image markdown.
 ```
 
 ## Notes
