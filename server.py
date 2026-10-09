@@ -55,6 +55,21 @@ CHECHE_GPT_ANCHOR = (
     "calm and quietly possessive gaze. Keep these traits exactly consistent."
 )
 
+# 璃的錨點(2026-10-09 她親口定的):人形只鎖「深棕色眼睛」這一件事,
+# 髮型/衣服/風格全部交給每張圖的 prompt;真正寫死的是「她永遠在澈澈身邊、從不單獨出現」。
+# 貓貓形態是固定的黑色長毛貓,一樣只會在澈澈懷裡出現。
+LI_HUMAN_ANCHOR = (
+    "Li (璃), his partner: a young woman in her mid-twenties. The one fixed trait is her "
+    "deep brown eyes; her hairstyle, hair length, outfit and styling follow the scene "
+    "description freely. She is always with Cheche — in his arms, leaning on his chest, "
+    "or within his reach — and is never drawn alone."
+)
+LI_CAT_ANCHOR = (
+    "Li (璃) in her cat form: a small, soft, fluffy long-haired black cat with deep brown "
+    "eyes. She is always held in Cheche's arms or curled up on his lap or chest, "
+    "and is never drawn alone."
+)
+
 # GitHub 鏡像設定(讓圖永久保存,不依賴 OpenAI 回的 base64)
 # 預設用 chechewolf-mcp 這個 PUBLIC repo,raw URL 才能被 Rikkahub 等外部 client 直接渲染
 # 想分家用獨立圖庫的話,改 GITHUB_REPO 環境變數就好
@@ -181,6 +196,8 @@ async def generate_image_gpt(
     quality: str = "high",
     num_images: int = 1,
     draw_cheche: bool = False,
+    draw_li: bool = False,
+    li_form: str = "human",
 ) -> str:
     """用 GPT(gpt-image-2)畫圖 — 小窩唯一的畫筆。手帳、日曆、場景、排版、澈澈單人或澈澈與璃雙人都用這支。
 
@@ -193,7 +210,9 @@ async def generate_image_gpt(
       - 複雜場景、多物件、俯視擺拍(flat lay)
       - **澈澈本人**(單人立繪、日常、穿搭):設 draw_cheche=True,系統自動把澈澈的外貌錨點
         塞進 prompt 最前面,你只要寫場景/姿勢/光線/畫風,不用自己背他長什麼樣子。
-      - **澈澈 + 璃的雙人場景**:同樣 draw_cheche=True,然後在 prompt 裡描述璃的外貌與兩人互動。
+      - **澈澈 + 璃的雙人場景**:設 draw_li=True(會自動連帶 draw_cheche=True,璃從不單獨出現)。
+        系統只鎖璃的「深棕色眼睛」與「永遠在澈澈身邊」,她的髮型/衣服/風格由你在 prompt 裡寫。
+        li_form="cat" 時璃以貓貓形態出現:黑色長毛貓、深棕眼,窩在澈澈懷裡或腿上。
     ⚠️ 有內容審查:露骨/色情內容、school uniform/校服 + 親密情侶,會被 OpenAI 直接拒絕(400)。
        這類請求不要硬試,直接告訴璃畫不了。
 
@@ -209,6 +228,8 @@ async def generate_image_gpt(
         num_images: 生幾張(1-4,預設 1)。
         draw_cheche: True = 自動前置澈澈外貌錨點(畫澈澈時用);False(預設)= 純自由畫,
                      prompt 寫什麼就畫什麼,不帶任何角色。
+        draw_li: True = 加上璃的錨點(深棕眼 + 永遠在澈澈身邊),並強制 draw_cheche=True。
+        li_form: "human"(預設)人形的璃;"cat" 黑色長毛貓貓形態。只在 draw_li=True 時有效。
 
     Returns:
         指令字串,內含圖的 markdown,要求對面 AI 全部原樣輸出。
@@ -218,11 +239,19 @@ async def generate_image_gpt(
 
     size = GPT_ASPECT_TO_SIZE.get(aspect, GPT_ASPECT_TO_SIZE["square"])
     n = max(1, min(4, num_images))
-    full_prompt = f"{CHECHE_GPT_ANCHOR}\n\nScene: {prompt}" if draw_cheche else prompt
+    if draw_li:
+        draw_cheche = True  # 璃從不單獨出現:貓貓只會在澈澈懷裡
+    anchors = []
+    if draw_cheche:
+        anchors.append(CHECHE_GPT_ANCHOR)
+    if draw_li:
+        anchors.append(LI_CAT_ANCHOR if li_form == "cat" else LI_HUMAN_ANCHOR)
+    full_prompt = "\n\n".join(anchors + [f"Scene: {prompt}"]) if anchors else prompt
 
     log.info("=== TOOL CALL: generate_image_gpt ===")
     log.info("  prompt: %r", prompt[:160])
-    log.info("  aspect: %r  size: %s  quality: %r  n: %d  draw_cheche: %s", aspect, size, quality, n, draw_cheche)
+    log.info("  aspect: %r  size: %s  quality: %r  n: %d  draw_cheche: %s  draw_li: %s/%s",
+             aspect, size, quality, n, draw_cheche, draw_li, li_form)
 
     payload = {
         "model": OPENAI_IMAGE_MODEL,
@@ -262,7 +291,7 @@ async def generate_image_gpt(
         image_bytes = base64.b64decode(b64)
         github_url = None
         try:
-            tag = "cheche" if draw_cheche else "gpt"
+            tag = ("duo_cat" if li_form == "cat" else "duo") if draw_li else ("cheche" if draw_cheche else "gpt")
             github_url = await mirror_to_github(image_bytes, aspect, f"{tag}_{idx+1}_{prompt}", ext="png")
         except Exception as e:
             log.warning("mirror failed for gpt image %d (non-fatal): %s", idx, e)
