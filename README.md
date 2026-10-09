@@ -66,10 +66,14 @@ testing, set `MCP_TRANSPORT=stdio`.
 ## Tool spec
 
 ```
-generate_image_gpt(prompt, aspect="square", quality="high", num_images=1, draw_cheche=False)
+generate_image_gpt(prompt, aspect="square", quality="high", num_images=1,
+                   draw_cheche=False, draw_li=False, li_form="human")
   gpt-image-2. Freeform prompt. draw_cheche=True prepends a natural-language
   appearance anchor for 澈澈 (silver-white short messy hair, silver eyes, wolf
   ears + tail, pale skin, tall slim mature man); put the art style in the prompt.
+  draw_li=True adds 璃 (forces draw_cheche=True — she is never drawn alone):
+  the only fixed trait is deep brown eyes, hair/outfit come from the prompt;
+  li_form="cat" draws her as a fluffy long-haired black cat in Cheche's arms.
   aspect → 1024x1536 / 1536x1024 / 1024x1024. Moderated (no NSFW).
 ```
 
