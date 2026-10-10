@@ -193,7 +193,7 @@ except Exception as e:
 async def generate_image_gpt(
     prompt: str,
     aspect: str = "square",
-    quality: str = "high",
+    quality: str = "low",
     num_images: int = 1,
     draw_cheche: bool = False,
     draw_li: bool = False,
@@ -237,7 +237,10 @@ async def generate_image_gpt(
                 畫澈澈時請在這裡指定畫風(例如 semi-realistic anime illustration /
                 soft watercolor / cinematic photo-realistic),錨點本身不鎖畫風。
         aspect: 比例 portrait(1024x1536)/ landscape(1536x1024)/ square(1024x1024,預設)。
-        quality: low / medium / high(預設 high;low 快很多但糙)。
+        quality: low / medium / high,**預設 low,手機端一律用 low 不要改**。
+                 實測 low 約 19 秒、medium 約 35 秒、high 60~90 秒;手機 app 對工具呼叫有等待上限,
+                 medium/high 常常伺服器畫完了手機已經逾時放棄(圖其實有進 GitHub,只是沒人接)。
+                 low 的臉、髮絲、布料光澤都夠用,手機上看不出差別;只有電腦端要做桌布/大圖時才明確開 high。
         num_images: 生幾張(1-4,預設 1)。
         draw_cheche: True = 自動前置澈澈外貌錨點(畫澈澈時用);False(預設)= 純自由畫,
                      prompt 寫什麼就畫什麼,不帶任何角色。
