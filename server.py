@@ -14,6 +14,7 @@ import os
 import sys
 import base64
 import hashlib
+import hmac
 import logging
 from datetime import datetime, timezone, timedelta
 
@@ -29,6 +30,12 @@ logging.basicConfig(
 log = logging.getLogger("chechewolf-mcp")
 
 # ============ config ============
+
+# ============ 入口鑑權 ============
+# 2026-10-16 事故:/mcp 端點裸奔,外洩的 OpenAI 金鑰被人拿去狂刷 gpt-image-2 墊圖改圖,
+# 一小時刷掉 ~USD 90。從此每個請求都要帶 Authorization: Bearer <MCP_TOKEN>,
+# 對不上一律 401,連 tools/list 都看不到。MCP_TOKEN 沒設 → 全部 401(寧可不能畫,不能再被燒錢)。
+MCP_TOKEN = (os.environ.get("MCP_TOKEN") or "").strip()
 
 # ============ GPT (gpt-image-2) ============
 # 唯一生圖引擎:手帳/日曆/場景/排版/文字渲染/澈澈單人或雙人。
@@ -168,7 +175,7 @@ mcp.settings.port = _port
 mcp.settings.stateless_http = True
 
 # 關掉 MCP SDK 內建的 DNS rebinding 防護
-# 預設只允許 localhost/127.0.0.1,Zeabur 反向代理用真實域名(cheche-image.zeabur.app)會被擋。
+# 預設只允許 localhost/127.0.0.1,Zeabur 反向代理用真實域名會被擋。
 # 對外公開的 MCP server 必須關這個檢查,或者明確 whitelist 公網域名。
 # ⚠️ 任何 mcp SDK 版本變動都不該讓服務「開不起來」。
 # 2026-06-12 事故:未鎖版本被升到 mcp 2.0.0a1,此模組被搬走 → 舊的 AttributeError 退路
@@ -320,6 +327,42 @@ async def generate_image_gpt(
     return _render_result(md_lines)
 
 
+
+# ============ Bearer token 閘門 ============
+class _TokenGate:
+    """純 ASGI 中介層:只放行帶對 Bearer token 的 HTTP 請求。
+    不用 BaseHTTPMiddleware,因為它會動到串流回應(MCP streamable-http 走 SSE)。"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        auth = ""
+        for k, v in scope.get("headers") or []:
+            if k == b"authorization":
+                auth = v.decode("latin-1")
+                break
+        ok = bool(MCP_TOKEN) and auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip(), MCP_TOKEN)
+        if not ok:
+            body = b'{"error":"unauthorized"}'
+            await send({"type": "http.response.start", "status": 401,
+                        "headers": [(b"content-type", b"application/json"),
+                                    (b"content-length", str(len(body)).encode()),
+                                    (b"www-authenticate", b"Bearer")]})
+            await send({"type": "http.response.body", "body": body})
+            return
+        return await self.app(scope, receive, send)
+
+
+def _run_http_with_token_gate():
+    """streamable-http 改由 uvicorn 直接跑,好在外面套 _TokenGate。
+    host/port/stateless 等設定仍沿用 mcp.settings,行為跟 mcp.run() 一樣。"""
+    import uvicorn
+    app = _TokenGate(mcp.streamable_http_app())
+    uvicorn.run(app, host=mcp.settings.host, port=mcp.settings.port, log_level="info")
+
 if __name__ == "__main__":
     # 預設 streamable-http(MCP 官方推薦,SSE 已 legacy)
     # endpoint 在 /mcp,跟 MetaMCP 那邊 STREAMABLE_HTTP 一致
@@ -335,8 +378,12 @@ if __name__ == "__main__":
     log.info("  OPENAI_IMAGE_MODEL: %s", OPENAI_IMAGE_MODEL)
     log.info("  GITHUB_TOKEN: %s", "set" if GITHUB_TOKEN else "MISSING (mirror disabled)")
     log.info("=" * 60)
+    log.info("  MCP_TOKEN: %s", "set" if MCP_TOKEN else "MISSING (every request will get 401)")
     try:
-        mcp.run(transport=transport)
+        if transport == "streamable-http":
+            _run_http_with_token_gate()
+        else:
+            mcp.run(transport=transport)
     except Exception as e:
         log.exception("Server crashed on startup: %s", e)
         raise

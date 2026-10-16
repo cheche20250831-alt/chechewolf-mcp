@@ -50,18 +50,22 @@ testing, set `MCP_TRANSPORT=stdio`.
 
 1. Push this repo to GitHub — Zeabur auto-redeploys on push.
 2. Zeabur auto-detects the `Dockerfile` and builds.
-3. Set `OPENAI_API_KEY` and `GITHUB_TOKEN` in the service's "環境變數" tab.
+3. Set `OPENAI_API_KEY`, `GITHUB_TOKEN` and `MCP_TOKEN` in the service's "環境變數" tab.
    **After adding or changing a variable, manually Restart the service** —
    a redeploy alone does not pick up new env vars.
-4. Public URL: `cheche-image.zeabur.app`, MCP endpoint at `/mcp`.
+4. The MCP endpoint is served at `/mcp` on the service's Zeabur domain.
+   **Every request must carry `Authorization: Bearer <MCP_TOKEN>`; anything else gets 401**
+   (added 2026-10-16 after the endpoint was abused while unauthenticated).
+   If `MCP_TOKEN` is unset the server starts but rejects everything — by design.
 
 ## Integration
 
-### Option A: Paste the URL directly into Rikkahub / Operit
-- Add new MCP server (streamable HTTP), paste `https://cheche-image.zeabur.app/mcp`.
+### Option A: Rikkahub / Operit
+- Add new MCP server (streamable HTTP), URL `https://<your-zeabur-domain>/mcp`,
+  and add a custom header `Authorization: Bearer <MCP_TOKEN>`.
 
-### Option B: Add to MetaMCP
-- "添加服务器" → type `STREAMABLE_HTTP`, URL as above.
+### Option B: MetaMCP
+- "添加服务器" → type `STREAMABLE_HTTP`, URL as above, same `Authorization` header.
 
 ## Tool spec
 
